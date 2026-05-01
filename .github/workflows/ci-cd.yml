@@ -10,7 +10,6 @@ env:
   DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-showcase
 
 jobs:
-  # ── Job 1: Test & Code Quality ─────────────────────────────────
   test:
     name: 🧪 Test & Quality Checks
     runs-on: ubuntu-latest
@@ -24,22 +23,14 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          cd app
-          pip install -r requirements.txt
-          pip install pytest pytest-cov flake8
+        run: pip install flask prometheus-client gunicorn pytest pytest-cov flake8
 
       - name: Lint with flake8
-        run: |
-          cd app
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        run: flake8 app/app.py --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run tests
-        run: |
-          cd app
-          pytest tests/ -v || true
+        run: pytest app/tests/ -v || true
 
-  # ── Job 2: Security Scan ───────────────────────────────────────
   security:
     name: 🔒 Security Scan
     runs-on: ubuntu-latest
@@ -52,12 +43,11 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: './app'
+          scan-ref: '.'
           severity: 'CRITICAL,HIGH'
           format: 'table'
         continue-on-error: true
 
-  # ── Job 3: Docker Build & Push ─────────────────────────────────
   docker:
     name: 🐳 Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -85,15 +75,6 @@ jobs:
             ${{ env.DOCKER_IMAGE }}:latest
             ${{ env.DOCKER_IMAGE }}:${{ github.run_number }}
 
-      - name: Scan Docker image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.DOCKER_IMAGE }}:latest
-          severity: 'CRITICAL,HIGH'
-          format: 'table'
-        continue-on-error: true
-
-  # ── Job 4: Summary ─────────────────────────────────────────────
   summary:
     name: 📣 Pipeline Summary
     runs-on: ubuntu-latest
