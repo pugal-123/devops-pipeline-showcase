@@ -3,7 +3,7 @@
 <div align="center">
 
 ![CI/CD Pipeline](https://github.com/pugal-123/devops-pipeline-showcase/actions/workflows/ci-cd.yml/badge.svg)
-![Docker Pulls](https://img.shields.io/docker/pulls/pugal-123/devops-showcase?style=flat-square&logo=docker)
+![Docker Pulls](https://img.shields.io/docker/pulls/pugazh9876/devops-showcase?style=flat-square&logo=docker)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-Ready-326CE5?style=flat-square&logo=kubernetes)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
