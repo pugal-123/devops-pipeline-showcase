@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devops-showcase
+  namespace: devops-showcase
+  labels:
+    app: devops-showcase
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: devops-showcase
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # Zero-downtime deployment
+  template:
+    metadata:
+      labels:
+        app: devops-showcase
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: devops-showcase
+          image: pugal-123/devops-showcase:IMAGE_TAG
+          ports:
+            - containerPort: 5000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          env:
+            - name: FLASK_ENV
+              value: "production"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000

@@ -1,0 +1,45 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops-showcase
+  labels:
+    name: devops-showcase
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devops-showcase
+  namespace: devops-showcase
+  labels:
+    app: devops-showcase
+spec:
+  selector:
+    app: devops-showcase
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: devops-showcase-hpa
+  namespace: devops-showcase
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: devops-showcase
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

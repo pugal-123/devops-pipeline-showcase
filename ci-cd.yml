@@ -1,0 +1,166 @@
+name: 🚀 CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/devops-showcase
+  K8S_NAMESPACE: devops-showcase
+
+jobs:
+  # ── Job 1: Test & Code Quality ─────────────────────────────────
+  test:
+    name: 🧪 Test & Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd app
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8
+
+      - name: Lint with flake8
+        run: |
+          cd app
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run tests with coverage
+        run: |
+          cd app
+          pytest tests/ --cov=. --cov-report=xml --cov-report=term-missing || true
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          file: app/coverage.xml
+        continue-on-error: true
+
+  # ── Job 2: Security Scan ───────────────────────────────────────
+  security:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scan (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: './app'
+          severity: 'CRITICAL,HIGH'
+          format: 'table'
+        continue-on-error: true
+
+  # ── Job 3: Docker Build & Push ─────────────────────────────────
+  docker:
+    name: 🐳 Build & Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+            type=raw,value=${{ github.run_number }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan Docker image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE }}:latest
+          severity: 'CRITICAL,HIGH'
+          format: 'table'
+        continue-on-error: true
+
+  # ── Job 4: Deploy to Kubernetes ────────────────────────────────
+  deploy:
+    name: ☸️ Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Update image tag in deployment
+        run: |
+          sed -i "s|IMAGE_TAG|sha-$(git rev-parse --short HEAD)|g" \
+            k8s/base/deployment.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/base/ -n ${{ env.K8S_NAMESPACE }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/devops-showcase \
+            -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+          echo "✅ Deployment successful!"
+
+  # ── Job 5: Notify ──────────────────────────────────────────────
+  notify:
+    name: 📣 Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [test, security, docker, deploy]
+    if: always()
+    steps:
+      - name: Pipeline result
+        run: |
+          echo "=============================="
+          echo "  CI/CD Pipeline Complete"
+          echo "=============================="
+          echo "Test:     ${{ needs.test.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          echo "Docker:   ${{ needs.docker.result }}"
+          echo "Deploy:   ${{ needs.deploy.result }}"
